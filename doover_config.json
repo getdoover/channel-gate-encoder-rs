@@ -390,6 +390,20 @@
                     "currentValue": "$cmds.app().reset_missed"
                 }
             }
-        }
+        },
+        "container_registry_profile_id": 93955828574386692,
+        "organisation_id": null,
+        "id": 205837122022733829,
+        "key": null,
+        "owner_org_id": null,
+        "code_repo_id": null,
+        "repo_branch": "main",
+        "lambda_config": null,
+        "icon_url": null,
+        "banner_url": null,
+        "staging_config": {},
+        "build_widget_command": null,
+        "export_ui_command": null,
+        "lambda_arn": null
     }
 }
