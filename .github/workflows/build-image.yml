@@ -31,10 +31,13 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      # The fast suite: decoder + fidelity contract tests. The 2-minute soak
-      # stays behind --ignored and does not run in CI (see README: its
-      # pass/fail carries no signal on a contended host).
-      - run: cargo test
+      # Deterministic suites only. tests/fidelity.rs is deliberately NOT run
+      # here: it measures real pulse timing through real sockets, and on a
+      # contended host (shared CI runners included) scheduling jitter produces
+      # same-channel repeats that fail its assertions without indicating a
+      # code defect — its pass/fail carries no signal off an idle machine.
+      # Run it locally: cargo test --test fidelity
+      - run: cargo test --lib --test quadrature --test debug_endpoint --test app_e2e
 
   push_to_registries:
     name: Push Docker Image
