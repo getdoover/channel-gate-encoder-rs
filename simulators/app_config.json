@@ -1,0 +1,19 @@
+{
+    "APP_KEY": "channel_gate_encoder_sim",
+    "APP_DISPLAY_NAME": "Channel Gate Encoder (sim)",
+    "channel_a_pin": 0,
+    "channel_b_pin": 1,
+    "mm_per_count": 0.7,
+    "pulses_per_rev": 16,
+    "invert_direction": false,
+    "debounce_ms": 2,
+    "use_event_polling": false,
+    "event_poll_period_s": 0.25,
+    "assert_outputs_off_on_start": false,
+    "home_switch_pin": 2,
+    "home_switch_active_low": false,
+    "home_height_mm": 0.0,
+    "gate_travel_mm": 1000.0,
+    "display_refresh_period_s": 0.5,
+    "tag_publish_interval_s": 0.25
+}

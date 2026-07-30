@@ -1,0 +1,366 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Channel Gate Encoder — Motor Sim</title>
+<style>
+  :root {
+    --bg: #0f1420; --panel: #171e2e; --panel2: #1d2637; --line: #2a3550;
+    --text: #dbe4f5; --dim: #8494b3; --accent: #4da3ff; --ok: #3ecf8e;
+    --warn: #f5b83d; --bad: #ff6b6b;
+    font-size: 15px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 1.2rem; background: var(--bg); color: var(--text);
+    font-family: ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  h1 { font-size: 1.1rem; margin: 0; font-weight: 600; letter-spacing: .02em; }
+  .sub { color: var(--dim); font-size: .8rem; margin-top: .15rem; }
+  header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: .6rem; }
+  .dots { display: flex; gap: 1rem; font-size: .8rem; color: var(--dim); }
+  .dot { display: inline-block; width: .6rem; height: .6rem; border-radius: 50%; background: var(--bad); margin-right: .35rem; vertical-align: -1px; }
+  .dot.ok { background: var(--ok); }
+  .grid { display: grid; grid-template-columns: 340px 1fr; gap: 1rem; align-items: start; }
+  @media (max-width: 860px) { .grid { grid-template-columns: 1fr; } }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 1rem; }
+  .card h2 { font-size: .8rem; text-transform: uppercase; letter-spacing: .08em; color: var(--dim); margin: 0 0 .8rem; font-weight: 600; }
+  label { display: block; font-size: .78rem; color: var(--dim); margin-bottom: .25rem; }
+  .row { display: flex; gap: .8rem; align-items: center; margin-bottom: .9rem; }
+  input[type=range] { flex: 1; accent-color: var(--accent); }
+  input[type=number] {
+    width: 5.2rem; background: var(--panel2); color: var(--text); border: 1px solid var(--line);
+    border-radius: 6px; padding: .35rem .5rem; font-size: .9rem;
+  }
+  .seg { display: flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg button { flex: 1; background: var(--panel2); color: var(--dim); border: 0; padding: .5rem 0; font-size: .85rem; cursor: pointer; }
+  .seg button.active { background: var(--accent); color: #08111f; font-weight: 600; }
+  .btns { display: flex; gap: .6rem; margin-top: .4rem; }
+  .btn {
+    flex: 1; border: 0; border-radius: 8px; padding: .65rem 0; font-size: .95rem; font-weight: 600;
+    cursor: pointer; color: #08111f; background: var(--accent);
+  }
+  .btn.stop { background: var(--bad); }
+  .btn.ghost { background: var(--panel2); color: var(--text); border: 1px solid var(--line); font-weight: 500; }
+  .btn:disabled { opacity: .45; cursor: default; }
+  .trainState { font-size: .8rem; color: var(--dim); margin-top: .7rem; min-height: 1.1em; }
+  .trainState b { color: var(--text); }
+  .di { display: flex; gap: .5rem; margin-top: .8rem; }
+  .di span { font-size: .72rem; color: var(--dim); padding: .25rem .5rem; border-radius: 6px; background: var(--panel2); border: 1px solid var(--line); }
+  .di span.hi { color: #08111f; background: var(--ok); border-color: var(--ok); font-weight: 700; }
+  .big { font-size: 3.2rem; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1; }
+  .big small { font-size: 1.1rem; color: var(--dim); font-weight: 500; }
+  .kpis { display: flex; gap: 1.6rem; flex-wrap: wrap; margin-top: .9rem; }
+  .kpi { min-width: 5.5rem; }
+  .kpi .v { font-size: 1.15rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .kpi .l { font-size: .7rem; color: var(--dim); text-transform: uppercase; letter-spacing: .06em; }
+  .bar { height: .55rem; background: var(--panel2); border-radius: 4px; margin-top: 1rem; overflow: hidden; }
+  .bar div { height: 100%; width: 0%; background: var(--accent); transition: width .4s; }
+  .badge { display: inline-block; font-size: .72rem; padding: .18rem .55rem; border-radius: 99px; background: var(--panel2); border: 1px solid var(--line); color: var(--dim); margin-left: .6rem; vertical-align: middle; }
+  .badge.on { color: #08111f; background: var(--ok); border-color: var(--ok); font-weight: 700; }
+  .badge.warnb { color: #08111f; background: var(--warn); border-color: var(--warn); font-weight: 700; }
+  canvas { width: 100%; height: 90px; margin-top: 1rem; display: block; }
+  table { width: 100%; border-collapse: collapse; font-size: .84rem; }
+  td { padding: .34rem .4rem; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+  td:first-child { color: var(--dim); }
+  td:last-child { text-align: right; }
+  tr.flash td:last-child { color: var(--accent); }
+  select { background: var(--panel2); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: .3rem .4rem; font-size: .82rem; max-width: 100%; }
+  #log { font-family: ui-monospace, Menlo, monospace; font-size: .72rem; color: var(--dim); margin-top: 1rem; max-height: 7rem; overflow-y: auto; white-space: pre-wrap; }
+  .err { color: var(--bad); }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Channel Gate Encoder — Motor Sim</h1>
+    <div class="sub" id="target"></div>
+  </div>
+  <div class="dots">
+    <span><i class="dot" id="dot-sim"></i>sim</span>
+    <span><i class="dot" id="dot-dda"></i>dda</span>
+    <span><i class="dot" id="dot-app"></i>app feed</span>
+  </div>
+</header>
+
+<div class="grid">
+  <div>
+    <div class="card">
+      <h2>Pulse train</h2>
+      <label>Frequency — <b id="freqLabel">10.0</b> Hz (tooth cycles/s; counts = 2×)</label>
+      <div class="row">
+        <input type="range" id="freq" min="0.5" max="30" step="0.5" value="10">
+      </div>
+      <label>Direction</label>
+      <div class="seg" id="dirSeg">
+        <button data-dir="open" class="active">Open ▲ (B leads A)</button>
+        <button data-dir="close">Close ▼ (A leads B)</button>
+      </div>
+      <div class="row" style="margin-top:.9rem">
+        <div style="flex:1">
+          <label>Cycles (blank = run until stopped)</label>
+          <input type="number" id="cycles" min="1" placeholder="∞">
+        </div>
+        <div style="flex:1; font-size:.72rem; color:var(--dim)" id="cyclesHint"></div>
+      </div>
+      <div class="btns">
+        <button class="btn" id="start">Start</button>
+        <button class="btn stop" id="stop">Stop</button>
+      </div>
+      <div class="trainState" id="trainState">no train</div>
+      <div class="di" id="diRow"></div>
+    </div>
+
+    <div class="card" style="margin-top:1rem">
+      <h2>Motor — follows gate controller</h2>
+      <div class="row" style="margin-bottom:.5rem">
+        <label style="margin:0; flex:1; color:var(--text)">
+          <input type="checkbox" id="followEnabled" checked> Drive train from DO outputs
+        </label>
+        <input type="number" id="followFreq" min="0.5" max="30" step="0.5" value="15" title="follow speed, Hz">
+        <span style="font-size:.75rem;color:var(--dim)">Hz</span>
+      </div>
+      <div class="di" id="doRow" style="margin-top:.3rem"></div>
+      <div class="trainState" id="followState">idle</div>
+      <div class="trainState" style="margin-top:.3rem">DO0+DO1 → open ▲ · DO0+DO2 → close ▼ · else stop</div>
+    </div>
+
+    <div class="card" style="margin-top:1rem">
+      <h2>Home switch</h2>
+      <div class="btns" style="margin-top:0">
+        <button class="btn ghost" id="homePulse">Pulse home (rising edge)</button>
+      </div>
+      <div class="trainState">Homing zeroes the count at the configured home height.</div>
+    </div>
+
+    <div id="log"></div>
+  </div>
+
+  <div>
+    <div class="card">
+      <h2>Position <span style="float:right;font-weight:400;text-transform:none;letter-spacing:0" id="encoderPick"></span></h2>
+      <div class="big"><span id="height">—</span> <small>mm</small>
+        <span class="badge" id="homed">not homed</span>
+        <span class="badge" id="homeSwitch">home sw</span>
+      </div>
+      <div class="bar"><div id="pct"></div></div>
+      <div class="kpis">
+        <div class="kpi"><div class="v" id="direction">—</div><div class="l">direction</div></div>
+        <div class="kpi"><div class="v" id="speed">—</div><div class="l">mm/min</div></div>
+        <div class="kpi"><div class="v" id="count">—</div><div class="l">raw count</div></div>
+        <div class="kpi"><div class="v" id="rpm">—</div><div class="l">rpm</div></div>
+        <div class="kpi"><div class="v" id="revs">—</div><div class="l">revs</div></div>
+      </div>
+      <canvas id="spark" width="800" height="90"></canvas>
+    </div>
+
+    <div class="card" style="margin-top:1rem">
+      <h2>Tags on dda</h2>
+      <table id="tags"></table>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+let direction = "open";
+let selectedKey = localStorage.getItem("encoderKey") || null;
+let lastTags = {};
+let lastHeartbeat = null, lastHeartbeatAt = 0;
+const history = [];   // [t, height]
+
+$("freq").oninput = () => {
+  $("freqLabel").textContent = Number($("freq").value).toFixed(1);
+  updateCyclesHint();
+};
+$("cycles").oninput = updateCyclesHint;
+function updateCyclesHint() {
+  const c = parseInt($("cycles").value);
+  const f = Number($("freq").value);
+  $("cyclesHint").textContent = c > 0
+    ? `≈ ${(2 * c).toFixed(0)} counts, ${(c / f).toFixed(1)} s`
+    : "";
+}
+
+for (const b of $("dirSeg").querySelectorAll("button")) {
+  b.onclick = () => {
+    direction = b.dataset.dir;
+    for (const x of $("dirSeg").querySelectorAll("button")) x.classList.toggle("active", x === b);
+  };
+}
+
+function logLine(msg, isErr) {
+  const el = $("log");
+  const line = document.createElement("div");
+  if (isErr) line.className = "err";
+  line.textContent = `${new Date().toLocaleTimeString()}  ${msg}`;
+  el.prepend(line);
+  while (el.childNodes.length > 40) el.removeChild(el.lastChild);
+}
+
+async function api(path, body) {
+  const r = await fetch(path, body === undefined ? {} : {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.error || data.detail || r.statusText);
+  return data;
+}
+
+$("start").onclick = async () => {
+  const cycles = parseInt($("cycles").value) || null;
+  const frequency_hz = Number($("freq").value);
+  try {
+    await api("/api/train", { frequency_hz, direction, cycles });
+    logLine(`train started: ${frequency_hz} Hz ${direction}${cycles ? `, ${cycles} cycles` : ""}`);
+  } catch (e) { logLine(`start failed: ${e.message}`, true); }
+};
+$("stop").onclick = async () => {
+  try { await api("/api/train/stop", {}); logLine("train stopped"); }
+  catch (e) { logLine(`stop failed: ${e.message}`, true); }
+};
+$("homePulse").onclick = async () => {
+  try { await api("/api/home/pulse", {}); logLine("home switch pulsed"); }
+  catch (e) { logLine(`home pulse failed: ${e.message}`, true); }
+};
+$("followEnabled").onchange = async (e) => {
+  try {
+    await api("/api/follow", { enabled: e.target.checked });
+    logLine(`motor follow ${e.target.checked ? "enabled" : "disabled"}`);
+  } catch (err) { logLine(`follow toggle failed: ${err.message}`, true); }
+};
+$("followFreq").onchange = async (e) => {
+  const f = Number(e.target.value);
+  if (!(f > 0)) return;
+  try { await api("/api/follow", { frequency_hz: f }); logLine(`motor speed set to ${f} Hz`); }
+  catch (err) { logLine(`follow speed failed: ${err.message}`, true); }
+};
+
+function fmt(v) {
+  if (typeof v === "number") return Number.isInteger(v) ? v : v.toFixed(2);
+  return String(v);
+}
+
+function renderTrain(spec, pins) {
+  if (!spec) { $("trainState").textContent = "no train"; return; }
+  const b = (spec.pins || []).find(p => p.pin === pins.b);
+  const dir = b && Math.abs(b.phase_deg - 270) < 1 ? "open ▲" : "close ▼";
+  $("trainState").innerHTML =
+    `train: <b>${spec.frequency_hz} Hz</b> ${dir}` +
+    (spec.cycles ? `, ${spec.cycles} cycles` : ", continuous");
+}
+
+function renderDi(di, pins) {
+  if (!di) { $("diRow").innerHTML = ""; return; }
+  const names = {};
+  names[pins.a] = "A"; names[pins.b] = "B"; names[pins.home] = "HOME";
+  $("diRow").innerHTML = di.map((v, i) =>
+    `<span class="${v ? "hi" : ""}">DI${i}${names[i] ? " · " + names[i] : ""}</span>`).join("");
+}
+
+function renderMotor(s) {
+  const names = {};
+  if (s.dos) { names[s.dos.pump] = "PUMP"; names[s.dos.raise] = "RAISE"; names[s.dos.lower] = "LOWER"; }
+  if (s.do) {
+    $("doRow").innerHTML = s.do.map((v, i) =>
+      `<span class="${v ? "hi" : ""}">DO${i}${names[i] ? " · " + names[i] : ""}</span>`).join("");
+  }
+  const f = s.follow || {};
+  if (document.activeElement !== $("followFreq")) $("followFreq").value = f.frequency_hz ?? 5;
+  $("followEnabled").checked = !!f.enabled;
+  $("followState").textContent = !f.enabled ? "follow disabled"
+    : f.driving ? `driving: ${f.driving} @ ${f.frequency_hz} Hz` : "idle — waiting on controller outputs";
+}
+
+function renderEncoderPick(encoders) {
+  const keys = Object.keys(encoders);
+  if (!keys.length) { $("encoderPick").textContent = "no encoder tags yet — is the app running?"; return; }
+  if (!selectedKey || !keys.includes(selectedKey)) selectedKey = keys[0];
+  if (keys.length === 1) { $("encoderPick").textContent = selectedKey; return; }
+  $("encoderPick").innerHTML =
+    `<select id="keySel">${keys.map(k => `<option ${k === selectedKey ? "selected" : ""}>${k}</option>`).join("")}</select>`;
+  $("keySel").onchange = e => { selectedKey = e.target.value; localStorage.setItem("encoderKey", selectedKey); };
+}
+
+function drawSpark() {
+  const c = $("spark"), ctx = c.getContext("2d");
+  ctx.clearRect(0, 0, c.width, c.height);
+  if (history.length < 2) return;
+  const hs = history.map(p => p[1]);
+  let min = Math.min(...hs), max = Math.max(...hs);
+  if (max - min < 1) { max += 1; min -= 1; }
+  const t0 = history[0][0], t1 = history[history.length - 1][0];
+  ctx.strokeStyle = "#4da3ff"; ctx.lineWidth = 2; ctx.beginPath();
+  for (let i = 0; i < history.length; i++) {
+    const x = (history[i][0] - t0) / Math.max(t1 - t0, 1) * (c.width - 4) + 2;
+    const y = c.height - 6 - (history[i][1] - min) / (max - min) * (c.height - 12);
+    i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+  }
+  ctx.stroke();
+  ctx.fillStyle = "#8494b3"; ctx.font = "11px ui-monospace";
+  ctx.fillText(max.toFixed(0), 4, 12);
+  ctx.fillText(min.toFixed(0), 4, c.height - 10);
+}
+
+function renderTags(tags) {
+  const order = ["Height", "PercentOpen", "RawCount", "Direction", "Speed", "Homed", "HomeSwitch",
+                 "Revolutions", "RPM", "RotationDirection", "MissedEdges", "AmbiguousEdges", "Heartbeat"];
+  const keys = [...order.filter(k => k in tags), ...Object.keys(tags).filter(k => !order.includes(k)).sort()];
+  $("tags").innerHTML = keys.map(k => {
+    const changed = JSON.stringify(tags[k]) !== JSON.stringify(lastTags[k]);
+    return `<tr class="${changed ? "flash" : ""}"><td>${k}</td><td>${fmt(tags[k])}</td></tr>`;
+  }).join("");
+  lastTags = tags;
+}
+
+async function poll() {
+  let s;
+  try { s = await api("/api/status"); }
+  catch (e) { $("dot-sim").className = $("dot-dda").className = $("dot-app").className = "dot"; return; }
+
+  $("dot-sim").className = "dot" + (s.sim_ok ? " ok" : "");
+  $("dot-dda").className = "dot" + (s.dda_ok ? " ok" : "");
+  for (const e of s.errors || []) if (!poll._warned) logLine(e, true);
+  poll._warned = (s.errors || []).length > 0;
+
+  if (s.sim_ok) { renderTrain(s.train, s.pins); renderDi(s.di, s.pins); renderMotor(s); }
+
+  if (s.dda_ok) {
+    renderEncoderPick(s.encoders || {});
+    const tags = (s.encoders || {})[selectedKey];
+    if (tags) {
+      renderTags(tags);
+      $("height").textContent = (tags.Height ?? 0).toFixed(1);
+      $("pct").style.width = `${Math.min(100, Math.max(0, tags.PercentOpen ?? 0))}%`;
+      $("direction").textContent = tags.Direction ?? "—";
+      $("speed").textContent = fmt(tags.Speed ?? "—");
+      $("count").textContent = tags.RawCount ?? "—";
+      $("rpm").textContent = fmt(tags.RPM ?? "—");
+      $("revs").textContent = fmt(tags.Revolutions ?? "—");
+      $("homed").textContent = tags.Homed ? "homed" : "not homed";
+      $("homed").className = "badge" + (tags.Homed ? " on" : " warnb");
+      $("homeSwitch").textContent = tags.HomeSwitch ? "home sw: ON" : "home sw: off";
+      $("homeSwitch").className = "badge" + (tags.HomeSwitch ? " on" : "");
+
+      // App feed is alive if Heartbeat advances (publishes every ~0.5 s).
+      if (tags.Heartbeat !== lastHeartbeat) { lastHeartbeat = tags.Heartbeat; lastHeartbeatAt = Date.now(); }
+      $("dot-app").className = "dot" + (Date.now() - lastHeartbeatAt < 5000 ? " ok" : "");
+
+      history.push([Date.now() / 1000, tags.Height ?? 0]);
+      while (history.length > 240) history.shift();
+      drawSpark();
+    }
+  }
+}
+
+$("target").textContent = "controls the platform-iface sim's pulse train; tags read live from the dda";
+updateCyclesHint();
+poll();
+setInterval(poll, 500);
+</script>
+</body>
+</html>

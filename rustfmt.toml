@@ -1,0 +1,4 @@
+# Match doover-rs's house style: 100 columns, and let short structs/calls stay on
+# one line rather than exploding vertically.
+max_width = 100
+use_small_heuristics = "Max"

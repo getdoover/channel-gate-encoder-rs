@@ -1,0 +1,395 @@
+{
+    "channel_gate_encoder": {
+        "name": "channel_gate_encoder",
+        "display_name": "Channel Gate Encoder (Rust)",
+        "type": "DEV",
+        "visibility": "PUB",
+        "allow_many": true,
+        "description": "Quadrature encoder (Rust): decodes the RISING edges of two proximity sensors into channel gate height, homes against a limit switch, and publishes absolute position + direction as tags on a configurable timer.",
+        "long_description": "README.md",
+        "depends_on": [
+            "platform_interface"
+        ],
+        "owner_org_key": "",
+        "image_name": "ghcr.io/getdoover/channel-gate-encoder-rs:main",
+        "build_args": "--platform linux/amd64,linux/arm64",
+        "export_config_command": "channel-gate-encoder export doover_config.json --app-name channel_gate_encoder",
+        "run_command": "channel-gate-encoder",
+        "config_schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "$id": "",
+            "title": "$default",
+            "type": "object",
+            "properties": {
+                "channel_a_pin": {
+                    "title": "Channel A Pin",
+                    "x-name": "channel_a_pin",
+                    "x-hidden": false,
+                    "type": "integer",
+                    "x-required": true,
+                    "description": "Digital input wired to proximity sensor A.",
+                    "x-position": 0,
+                    "minimum": 0
+                },
+                "channel_b_pin": {
+                    "title": "Channel B Pin",
+                    "x-name": "channel_b_pin",
+                    "x-hidden": false,
+                    "type": "integer",
+                    "x-required": true,
+                    "description": "Digital input wired to proximity sensor B (mounted a quarter\ntarget-pitch from A so it lags/leads A by ~90 degrees).",
+                    "x-position": 1,
+                    "minimum": 0
+                },
+                "mm_per_count": {
+                    "title": "mm per Count",
+                    "x-name": "mm_per_count",
+                    "x-hidden": false,
+                    "type": [
+                        "number",
+                        "null"
+                    ],
+                    "x-required": false,
+                    "description": "Gate travel per decoded count, which is also the position granularity.\nOnly RISING edges are captured, one per channel per tooth, so decoding\nis 2x (2 counts per full target-tooth cycle) and this is target pitch /\n2. e.g. a 20 mm tooth pitch -> 10.0. This is DOUBLE the old both-edge\n(4x) value for the same target -- halve the tooth pitch if you need the\nresolution back.",
+                    "default": 2.0,
+                    "x-position": 2,
+                    "minimum": 0
+                },
+                "pulses_per_rev": {
+                    "title": "Pulses Per Rev",
+                    "x-name": "pulses_per_rev",
+                    "x-hidden": false,
+                    "type": [
+                        "integer",
+                        "null"
+                    ],
+                    "x-required": false,
+                    "description": "Teeth on the target wheel (rising edges per channel per revolution).\nDecoding is 2x, so counts_per_rev = 2 x this -- used for the revolutions\nand RPM readouts.",
+                    "default": 16,
+                    "x-position": 3,
+                    "minimum": 1
+                },
+                "invert_direction": {
+                    "title": "Invert Direction",
+                    "x-name": "invert_direction",
+                    "x-hidden": false,
+                    "type": [
+                        "boolean",
+                        "null"
+                    ],
+                    "x-required": false,
+                    "description": "Flip the counting direction so the gate rising reads as an increasing\nheight. Toggle this instead of swapping the sensors.",
+                    "default": false,
+                    "x-position": 4
+                },
+                "debounce_ms": {
+                    "title": "Debounce (ms)",
+                    "x-name": "debounce_ms",
+                    "x-hidden": false,
+                    "type": [
+                        "integer",
+                        "null"
+                    ],
+                    "x-required": false,
+                    "description": "Hardware debounce pushed to both channel DI pins. Keep small -- too high\ndrops counts when the gate moves quickly.",
+                    "default": 2,
+                    "x-position": 5,
+                    "minimum": 0
+                },
+                "use_event_polling": {
+                    "title": "Use Event Polling",
+                    "x-name": "use_event_polling",
+                    "x-hidden": false,
+                    "type": [
+                        "boolean",
+                        "null"
+                    ],
+                    "x-required": false,
+                    "description": "Read channel A/B edges by polling the platform's batched DI event log\ninstead of per-edge streaming callbacks. Streaming wedges the IO\nfirmware at high edge rates (~100+ edges/s hard-resets the device via\nits watchdog), so polling is the safe default; streaming remains\navailable for low-rate installs.",
+                    "default": true,
+                    "x-position": 6
+                },
+                "event_poll_period_s": {
+                    "title": "Event Poll Period (s)",
+                    "x-name": "event_poll_period_s",
+                    "x-hidden": false,
+                    "type": [
+                        "number",
+                        "null"
+                    ],
+                    "x-required": false,
+                    "description": "How often the DI event log is polled in event-polling mode. The firmware\nbuffer holds ~600 events; poll fast enough that it never fills between\npolls at your top edge rate.",
+                    "default": 0.25,
+                    "x-position": 7,
+                    "minimum": 0.05
+                },
+                "assert_outputs_off_on_start": {
+                    "title": "Assert Outputs Off On Start",
+                    "x-name": "assert_outputs_off_on_start",
+                    "x-hidden": false,
+                    "type": [
+                        "boolean",
+                        "null"
+                    ],
+                    "x-required": false,
+                    "description": "Write DO0/1/2 off once at app start. The platform restores\ndigital-output states across reboots, so after a crash mid-motion the\noutputs come back energised unless something asserts them off. Enable on\nany install where this app is the safety backstop (e.g. bench rigs).",
+                    "default": false,
+                    "x-position": 8
+                },
+                "home_switch_pin": {
+                    "title": "Home Switch Pin",
+                    "x-name": "home_switch_pin",
+                    "x-hidden": false,
+                    "type": [
+                        "integer",
+                        "null"
+                    ],
+                    "x-required": false,
+                    "description": "Digital input for the end-of-travel limit switch that establishes the\nzero. Leave unset to home only via the button.",
+                    "default": null,
+                    "x-position": 9,
+                    "minimum": 0
+                },
+                "home_switch_active_low": {
+                    "title": "Home Switch Active Low",
+                    "x-name": "home_switch_active_low",
+                    "x-hidden": false,
+                    "type": [
+                        "boolean",
+                        "null"
+                    ],
+                    "x-required": false,
+                    "description": "Set if the limit switch reads LOW when the gate is at the home position\n(falling edge triggers homing).",
+                    "default": false,
+                    "x-position": 10
+                },
+                "home_height_mm": {
+                    "title": "Home Height (mm)",
+                    "x-name": "home_height_mm",
+                    "x-hidden": false,
+                    "type": [
+                        "number",
+                        "null"
+                    ],
+                    "x-required": false,
+                    "description": "The gate height when the home switch is active. Usually 0 for a switch\nat fully closed, or the full travel for one at fully open.",
+                    "default": 0.0,
+                    "x-position": 11
+                },
+                "gate_travel_mm": {
+                    "title": "Gate Travel (mm)",
+                    "x-name": "gate_travel_mm",
+                    "x-hidden": false,
+                    "type": [
+                        "number",
+                        "null"
+                    ],
+                    "x-required": false,
+                    "description": "Full travel of the gate, used for the percent-open readout and range\ncolouring.",
+                    "default": 1000.0,
+                    "x-position": 12,
+                    "minimum": 0
+                },
+                "display_refresh_period_s": {
+                    "title": "Display Refresh Period (s)",
+                    "x-name": "display_refresh_period_s",
+                    "x-hidden": false,
+                    "type": [
+                        "number",
+                        "null"
+                    ],
+                    "x-required": false,
+                    "description": "How often the height/status readouts refresh. Counting is event-driven\nand unaffected by this.",
+                    "default": 0.5,
+                    "x-position": 13,
+                    "minimum": 0.1
+                },
+                "tag_publish_interval_s": {
+                    "title": "Tag Publish Interval (s)",
+                    "x-name": "tag_publish_interval_s",
+                    "x-hidden": false,
+                    "type": [
+                        "number",
+                        "null"
+                    ],
+                    "x-required": false,
+                    "description": "How often absolute position and direction are written to tags. Counting\nis event-driven and completely decoupled from this: a pulse callback only\nbumps an in-memory count, and this timer derives and publishes the\nresult. Lower it for tighter closed-loop control (the controller cannot\nstop the gate more accurately than the position it can see -- overshoot\nis roughly gate speed x this interval), raise it to cut cloud traffic on\na slow gate.",
+                    "default": 0.5,
+                    "x-position": 14,
+                    "minimum": 0.05
+                }
+            },
+            "additionalElements": true,
+            "required": [
+                "channel_a_pin",
+                "channel_b_pin"
+            ]
+        },
+        "ui_schema": {
+            "displayString": "$config.app().APP_DISPLAY_NAME",
+            "hidden": "$config.app().interpreter_hidden:boolean:false",
+            "position": "$config.app().dv_app_position:number:100",
+            "icon": null,
+            "colour": null,
+            "defaultOpen": "$config.app().dv_app_default_open:boolean",
+            "type": "uiApplication",
+            "name": "$config.app().APP_KEY",
+            "children": {
+                "height": {
+                    "name": "height",
+                    "type": "uiVariable",
+                    "displayString": "Gate Height (mm)",
+                    "showActivity": true,
+                    "position": 51,
+                    "hidden": false,
+                    "varType": "float",
+                    "currentValue": "$tag.app().Height:number:0.0",
+                    "decPrecision": 1,
+                    "live": true
+                },
+                "percent_open": {
+                    "name": "percent_open",
+                    "type": "uiVariable",
+                    "displayString": "Percent Open (%)",
+                    "showActivity": true,
+                    "position": 52,
+                    "hidden": false,
+                    "varType": "float",
+                    "currentValue": "$tag.app().PercentOpen:number:0.0",
+                    "decPrecision": 1,
+                    "live": true
+                },
+                "direction": {
+                    "name": "direction",
+                    "type": "uiVariable",
+                    "displayString": "Movement",
+                    "showActivity": true,
+                    "position": 53,
+                    "hidden": false,
+                    "varType": "string",
+                    "currentValue": "$tag.app().Direction:string:\"stopped\"",
+                    "live": true
+                },
+                "speed": {
+                    "name": "speed",
+                    "type": "uiVariable",
+                    "displayString": "Speed (mm/min)",
+                    "showActivity": true,
+                    "position": 54,
+                    "hidden": false,
+                    "varType": "float",
+                    "currentValue": "$tag.app().Speed:number:0.0",
+                    "decPrecision": 0,
+                    "live": true
+                },
+                "revolutions": {
+                    "name": "revolutions",
+                    "type": "uiVariable",
+                    "displayString": "Revolutions",
+                    "showActivity": true,
+                    "position": 55,
+                    "hidden": false,
+                    "varType": "float",
+                    "currentValue": "$tag.app().Revolutions:number:0.0",
+                    "decPrecision": 2,
+                    "live": true
+                },
+                "rpm": {
+                    "name": "rpm",
+                    "type": "uiVariable",
+                    "displayString": "RPM",
+                    "showActivity": true,
+                    "position": 56,
+                    "hidden": false,
+                    "varType": "float",
+                    "currentValue": "$tag.app().RPM:number:0.0",
+                    "decPrecision": 1,
+                    "live": true
+                },
+                "rotation": {
+                    "name": "rotation",
+                    "type": "uiVariable",
+                    "displayString": "Rotation",
+                    "showActivity": true,
+                    "position": 57,
+                    "hidden": false,
+                    "varType": "string",
+                    "currentValue": "$tag.app().RotationDirection:string:\"stopped\"",
+                    "live": true
+                },
+                "homed": {
+                    "name": "homed",
+                    "type": "uiVariable",
+                    "displayString": "Homed",
+                    "showActivity": true,
+                    "position": 58,
+                    "hidden": false,
+                    "varType": "bool",
+                    "currentValue": "$tag.app().Homed:boolean:false",
+                    "live": true
+                },
+                "not_homed": {
+                    "name": "not_homed",
+                    "type": "uiWarningIndicator",
+                    "displayString": "Not homed - height unverified",
+                    "position": 59,
+                    "hidden": true,
+                    "currentValue": "$cmds.app().not_homed",
+                    "can_cancel": false
+                },
+                "home_switch": {
+                    "name": "home_switch",
+                    "type": "uiVariable",
+                    "displayString": "At Home Switch",
+                    "showActivity": true,
+                    "position": 60,
+                    "hidden": false,
+                    "varType": "bool",
+                    "currentValue": "$tag.app().HomeSwitch:boolean:false",
+                    "live": true
+                },
+                "raw_count": {
+                    "name": "raw_count",
+                    "type": "uiVariable",
+                    "displayString": "Raw Count",
+                    "showActivity": true,
+                    "position": 61,
+                    "hidden": false,
+                    "varType": "float",
+                    "currentValue": "$tag.app().RawCount:number:0",
+                    "decPrecision": 0,
+                    "live": true
+                },
+                "missed_edges": {
+                    "name": "missed_edges",
+                    "type": "uiVariable",
+                    "displayString": "Missed Edges",
+                    "showActivity": true,
+                    "position": 62,
+                    "hidden": false,
+                    "varType": "float",
+                    "currentValue": "$tag.app().MissedEdges:number:0",
+                    "decPrecision": 0,
+                    "live": true
+                },
+                "set_home": {
+                    "name": "set_home",
+                    "type": "uiButton",
+                    "displayString": "Set Home Here",
+                    "position": 63,
+                    "hidden": false,
+                    "colour": "blue",
+                    "currentValue": "$cmds.app().set_home"
+                },
+                "reset_missed": {
+                    "name": "reset_missed",
+                    "type": "uiButton",
+                    "displayString": "Clear Missed Count",
+                    "position": 64,
+                    "hidden": false,
+                    "currentValue": "$cmds.app().reset_missed"
+                }
+            }
+        }
+    }
+}
