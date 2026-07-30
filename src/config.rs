@@ -57,12 +57,30 @@ pub struct ChannelGateEncoderConfig {
     pub debounce_ms: i64,
 
     /// Read channel A/B edges by polling the platform's batched DI event log
-    /// instead of per-edge streaming callbacks. Streaming wedges the IO
-    /// firmware at high edge rates (~100+ edges/s hard-resets the device via
-    /// its watchdog), so polling is the safe default; streaming remains
-    /// available for low-rate installs.
+    /// instead of per-edge streaming callbacks. On real Doovit hardware this
+    /// is the ONLY viable quadrature path, and even it cannot read direction
+    /// from timing alone: the IO firmware harvests edges in ~50 ms sweeps and
+    /// emits them grouped by pin, so cross-channel order/timing is destroyed
+    /// at any real gate speed (measured 2026-07-30 on doovit-0bb070: arrival
+    /// alternation 43%, fw-timestamp phase IQR spanning the ambiguity band).
+    /// Direction must come from the controller via `/direction_hint`, which
+    /// only the POLL path consults (the stream path passes hint=0). Streaming
+    /// remains for sims that deliver per-edge in true time order.
     #[config(default = true)]
     pub use_event_polling: bool,
+
+    /// Take the count's SIGN exclusively from the controller's
+    /// `/direction_hint` pushes and never from A/B rise timing. On real Doovit
+    /// hardware the firmware's ~50 ms harvest destroys cross-channel edge
+    /// timing (see `use_event_polling`), so timing inference produces garbage
+    /// direction; with this set, edges under an active hint are signed by the
+    /// commanded direction, and edges with no hint are held (unsigned) or
+    /// carried on the last commanded sign (ambiguous) — both visible in the
+    /// diagnostics. Pair with `use_event_polling = false` for per-edge
+    /// responsiveness. Leave false only on platforms whose pulse delivery
+    /// preserves true edge order (the sim).
+    #[config(default = false)]
+    pub hint_only_direction: bool,
 
     /// How often the DI event log is polled in event-polling mode. The firmware
     /// buffer holds ~600 events; poll fast enough that it never fills between

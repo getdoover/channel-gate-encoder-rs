@@ -146,6 +146,12 @@ pub struct RisingEdgeDecoder {
     /// Flip the sign of every step, so "gate rising" reads as an increasing
     /// count without physically re-wiring the two sensors.
     pub invert: bool,
+    /// Never infer direction from edge timing: the sign comes only from hints
+    /// (the commanding controller). Edges without an active hint are held
+    /// (`unsigned`) until a hint establishes the sense, or carried on the last
+    /// hinted sense (`ambiguous`). Set on platforms whose event delivery
+    /// destroys cross-channel timing (real Doovit firmware).
+    pub hint_only: bool,
     /// Raw sensor sense: +1 = B's rise leads A's, -1 = A leads B, 0 = unknown.
     pub sense: i8,
     /// `sense` with `invert` applied — the sign actually added to `count`, i.e.
@@ -213,6 +219,7 @@ impl RisingEdgeDecoder {
         Self {
             count: 0,
             invert,
+            hint_only: false,
             sense: 0,
             direction: 0,
             missed: 0,
@@ -294,6 +301,11 @@ impl RisingEdgeDecoder {
         let mut measured: i8 = 0;
         if hint == 1 || hint == -1 {
             measured = hint;
+        } else if self.hint_only {
+            // Timing carries no direction information on this platform
+            // (firmware harvest destroys cross-channel order). Leave the edge
+            // unmeasured: it is held if no sense exists yet, or signed by the
+            // last hinted sense as `ambiguous` below.
         } else if self.last_ch.is_none() {
             // First edge ever: nothing to measure against.
         } else if Some(channel) == self.last_ch {

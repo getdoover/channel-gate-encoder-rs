@@ -62,14 +62,52 @@ pub async fn spawn(port: u16, handles: DebugHandles) {
             let Ok((mut socket, _)) = listener.accept().await else { continue };
             let handles = handles.clone();
             tokio::spawn(async move {
-                let mut buf = [0u8; 2048];
-                let n = socket.read(&mut buf).await.unwrap_or(0);
-                let response = route(&buf[..n], &handles);
+                // Read until the headers AND the Content-Length body have both
+                // arrived. A single read() races clients that write headers and
+                // body separately (python urllib does) — the body is then
+                // missed and a /direction_hint quietly parses as "none", which
+                // mis-signs every edge of the following move.
+                let mut buf = Vec::with_capacity(2048);
+                let mut chunk = [0u8; 2048];
+                let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(2);
+                loop {
+                    let n = match tokio::time::timeout_at(deadline, socket.read(&mut chunk)).await
+                    {
+                        Ok(Ok(n)) => n,
+                        _ => 0,
+                    };
+                    if n == 0 {
+                        break;
+                    }
+                    buf.extend_from_slice(&chunk[..n]);
+                    if request_complete(&buf) || buf.len() > 64 * 1024 {
+                        break;
+                    }
+                }
+                let response = route(&buf, &handles);
                 let _ = socket.write_all(&response).await;
                 let _ = socket.shutdown().await;
             });
         }
     });
+}
+
+/// Whether `raw` holds a complete request: headers terminated, and at least
+/// `Content-Length` bytes of body after them (0 when the header is absent).
+fn request_complete(raw: &[u8]) -> bool {
+    let Some(head_end) = raw.windows(4).position(|w| w == b"\r\n\r\n") else {
+        return false;
+    };
+    let head = String::from_utf8_lossy(&raw[..head_end]);
+    let content_length = head
+        .lines()
+        .find_map(|l| {
+            let (name, value) = l.split_once(':')?;
+            name.eq_ignore_ascii_case("content-length").then(|| value.trim().parse::<usize>())
+        })
+        .and_then(Result::ok)
+        .unwrap_or(0);
+    raw.len() >= head_end + 4 + content_length
 }
 
 /// Dispatch one raw request. Split out from the socket handling so it is

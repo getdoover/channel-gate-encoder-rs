@@ -105,9 +105,22 @@
                         "null"
                     ],
                     "x-required": false,
-                    "description": "Read channel A/B edges by polling the platform's batched DI event log\ninstead of per-edge streaming callbacks. Streaming wedges the IO\nfirmware at high edge rates (~100+ edges/s hard-resets the device via\nits watchdog), so polling is the safe default; streaming remains\navailable for low-rate installs.",
+                    "description": "Read channel A/B edges by polling the platform's batched DI event log\ninstead of per-edge streaming callbacks. On real Doovit hardware this\nis the ONLY viable quadrature path, and even it cannot read direction\nfrom timing alone: the IO firmware harvests edges in ~50 ms sweeps and\nemits them grouped by pin, so cross-channel order/timing is destroyed\nat any real gate speed (measured 2026-07-30 on doovit-0bb070: arrival\nalternation 43%, fw-timestamp phase IQR spanning the ambiguity band).\nDirection must come from the controller via `/direction_hint`, which\nonly the POLL path consults (the stream path passes hint=0). Streaming\nremains for sims that deliver per-edge in true time order.",
                     "default": true,
                     "x-position": 6
+                },
+                "hint_only_direction": {
+                    "title": "Hint Only Direction",
+                    "x-name": "hint_only_direction",
+                    "x-hidden": false,
+                    "type": [
+                        "boolean",
+                        "null"
+                    ],
+                    "x-required": false,
+                    "description": "Take the count's SIGN exclusively from the controller's\n`/direction_hint` pushes and never from A/B rise timing. On real Doovit\nhardware the firmware's ~50 ms harvest destroys cross-channel edge\ntiming (see `use_event_polling`), so timing inference produces garbage\ndirection; with this set, edges under an active hint are signed by the\ncommanded direction, and edges with no hint are held (unsigned) or\ncarried on the last commanded sign (ambiguous) — both visible in the\ndiagnostics. Pair with `use_event_polling = false` for per-edge\nresponsiveness. Leave false only on platforms whose pulse delivery\npreserves true edge order (the sim).",
+                    "default": false,
+                    "x-position": 7
                 },
                 "event_poll_period_s": {
                     "title": "Event Poll Period (s)",
@@ -120,7 +133,7 @@
                     "x-required": false,
                     "description": "How often the DI event log is polled in event-polling mode. The firmware\nbuffer holds ~600 events; poll fast enough that it never fills between\npolls at your top edge rate.",
                     "default": 0.25,
-                    "x-position": 7,
+                    "x-position": 8,
                     "minimum": 0.05
                 },
                 "assert_outputs_off_on_start": {
@@ -134,7 +147,7 @@
                     "x-required": false,
                     "description": "Write DO0/1/2 off once at app start. The platform restores\ndigital-output states across reboots, so after a crash mid-motion the\noutputs come back energised unless something asserts them off. Enable on\nany install where this app is the safety backstop (e.g. bench rigs).",
                     "default": false,
-                    "x-position": 8
+                    "x-position": 9
                 },
                 "home_switch_pin": {
                     "title": "Home Switch Pin",
@@ -147,7 +160,7 @@
                     "x-required": false,
                     "description": "Digital input for the end-of-travel limit switch that establishes the\nzero. Leave unset to home only via the button.",
                     "default": null,
-                    "x-position": 9,
+                    "x-position": 10,
                     "minimum": 0
                 },
                 "home_switch_active_low": {
@@ -161,7 +174,7 @@
                     "x-required": false,
                     "description": "Set if the limit switch reads LOW when the gate is at the home position\n(falling edge triggers homing).",
                     "default": false,
-                    "x-position": 10
+                    "x-position": 11
                 },
                 "home_height_mm": {
                     "title": "Home Height (mm)",
@@ -174,7 +187,7 @@
                     "x-required": false,
                     "description": "The gate height when the home switch is active. Usually 0 for a switch\nat fully closed, or the full travel for one at fully open.",
                     "default": 0.0,
-                    "x-position": 11
+                    "x-position": 12
                 },
                 "gate_travel_mm": {
                     "title": "Gate Travel (mm)",
@@ -187,7 +200,7 @@
                     "x-required": false,
                     "description": "Full travel of the gate, used for the percent-open readout and range\ncolouring.",
                     "default": 1000.0,
-                    "x-position": 12,
+                    "x-position": 13,
                     "minimum": 0
                 },
                 "display_refresh_period_s": {
@@ -201,7 +214,7 @@
                     "x-required": false,
                     "description": "How often the height/status readouts refresh. Counting is event-driven\nand unaffected by this.",
                     "default": 0.5,
-                    "x-position": 13,
+                    "x-position": 14,
                     "minimum": 0.1
                 },
                 "tag_publish_interval_s": {
@@ -215,7 +228,7 @@
                     "x-required": false,
                     "description": "How often absolute position and direction are written to tags. Counting\nis event-driven and completely decoupled from this: a pulse callback only\nbumps an in-memory count, and this timer derives and publishes the\nresult. Lower it for tighter closed-loop control (the controller cannot\nstop the gate more accurately than the position it can see -- overshoot\nis roughly gate speed x this interval), raise it to cut cloud traffic on\na slow gate.",
                     "default": 0.5,
-                    "x-position": 14,
+                    "x-position": 15,
                     "minimum": 0.05
                 }
             },

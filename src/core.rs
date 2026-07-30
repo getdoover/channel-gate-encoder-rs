@@ -42,6 +42,7 @@ pub struct Params {
     pub use_event_polling: bool,
     pub event_poll_period_s: f64,
     pub invert_direction: bool,
+    pub hint_only_direction: bool,
 }
 
 impl Params {
@@ -60,6 +61,7 @@ impl Params {
             use_event_polling: cfg.use_event_polling,
             event_poll_period_s: cfg.event_poll_period_s,
             invert_direction: cfg.invert_direction,
+            hint_only_direction: cfg.hint_only_direction,
         }
     }
 
@@ -79,6 +81,7 @@ impl Params {
             use_event_polling: false,
             event_poll_period_s: 0.25,
             invert_direction: false,
+            hint_only_direction: false,
         }
     }
 }
@@ -110,7 +113,8 @@ pub struct EncoderCore {
 
 impl EncoderCore {
     pub fn new(params: Params) -> Self {
-        let state = EncoderState::new(params.invert_direction);
+        let mut state = EncoderState::new(params.invert_direction);
+        state.decoder.hint_only = params.hint_only_direction;
         let mut core = Self {
             state: Arc::new(Mutex::new(state)),
             snapshot: Arc::new(Mutex::new(Snapshot::default())),
@@ -217,11 +221,20 @@ impl EncoderCore {
     /// a pulse. proto3 explicit presence makes that distinction survive the wire.
     fn spawn_pulse_listener(&mut self, plt: &PlatformClient, channel: Channel, pin: i32) {
         let state = Arc::clone(&self.state);
+        let hints = Arc::clone(&self.hints);
         self.spawn_raw_listener(plt, pin, Edge::Rising, move |hw_period, reports_high| {
             // Timestamp taken before the lock: it is the delivery time and carries
             // whatever scheduling jitter the runtime added — at 16.7 ms A-to-B
             // spacing that is a real risk, which is what the soak measures.
             let t = monotonic_secs();
+            // The CURRENT hint (latest timeline entry), not a capture-time
+            // lookup: live pulses arrive well inside the controller's 1.2 s
+            // coast window, so the newest hint is the right authority — and
+            // it is the only sign source at all under `hint_only`.
+            let hint = {
+                let timeline = hints.lock().expect("hint lock");
+                timeline.last().map(|&(_, d)| d).unwrap_or(0)
+            };
             // The whole body of the pulse path: at 30 rising edges/s combined it
             // must only mutate cheap in-memory state. Deriving height/direction
             // and publishing tags is the publish timer's job (see `publish`).
@@ -233,7 +246,7 @@ impl EncoderCore {
             if let Some(trace) = &mut st.trace {
                 trace.push((channel, t));
             }
-            st.decoder.edge_with_period(channel, t, 0, hw_period);
+            st.decoder.edge_with_period(channel, t, hint, hw_period);
         });
     }
 

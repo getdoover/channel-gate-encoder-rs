@@ -47,6 +47,19 @@ async fn main() -> Result<()> {
         std::process::exit(if ok { 0 } else { 1 });
     }
 
+    // Any other argument must NOT fall through to `doover::run`: that boots
+    // the FULL app, and a second live instance double-publishes under this
+    // app key (a stray `--version` probe once square-waved the published
+    // height between two values). Only bare invocation (run) and `export`
+    // (handled inside `doover::run`) are valid.
+    match std::env::args().nth(1).as_deref() {
+        None | Some("export") => {}
+        Some(other) => {
+            eprintln!("unknown argument: {other} (expected nothing, 'export' or 'healthcheck')");
+            std::process::exit(2);
+        }
+    }
+
     let level = if std::env::var("DEBUG").is_ok_and(|v| v == "1") {
         tracing::Level::DEBUG
     } else {
